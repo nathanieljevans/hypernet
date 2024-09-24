@@ -1,0 +1,2 @@
+# GaNN
+Gaussian Neural Networks 
