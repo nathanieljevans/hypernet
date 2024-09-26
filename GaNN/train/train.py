@@ -1,6 +1,8 @@
 
 import torch
 from GaNN.models.GaNN import GaNN
+from GaNN.models.MCDO import MCDO
+from GaNN.models.MCBN import MCBN
 import numpy as np
 import torch.nn as nn
 
@@ -13,7 +15,6 @@ class EnergyDistanceLoss(nn.Module):
     def forward(self, p_samples, q_sample):
         # p_samples: (n_samples, n_batch, n_outputs)
         # q_sample: (n_batch, n_outputs)
-        n_samples, n_batch, n_outputs = p_samples.shape
 
         # Define a function to compute energy distance for one batch element
         def energy_distance_single_batch(p, q):
@@ -36,15 +37,20 @@ class EnergyDistanceLoss(nn.Module):
         # Return the average energy distance across batches
         return energy_distances.mean()
 
-def train(x,y, model_kwargs, loss_fn='mse', lr=1e-4, batch_size=124, num_epochs=1000, nsamples=1000, compile=False): 
+def train_ien(x,y, model_kwargs, loss_fn='mse', lr=1e-4, batch_size=124, num_epochs=1000, nsamples=1000, compile=False, use_cuda=True, nclasses=None): 
 
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    device = 'cuda' if (torch.cuda.is_available() and use_cuda) else 'cpu'
 
     x = x.to(device)
     y = y.to(device)
 
+    if nclasses is None: 
+        out_channels = y.size(1)
+    else: 
+        out_channels = nclasses
+
     model = GaNN(in_channels=x.size(1), 
-                out_channels=y.size(1), 
+                out_channels=out_channels, 
                 **model_kwargs).to(device)
     
     if compile:
@@ -61,6 +67,8 @@ def train(x,y, model_kwargs, loss_fn='mse', lr=1e-4, batch_size=124, num_epochs=
         crit = torch.nn.GaussianNLLLoss()
     elif loss_fn == 'edl': 
         crit = EnergyDistanceLoss()
+    elif loss_fn == 'ce': 
+        crit = torch.nn.CrossEntropyLoss()
     else:
         raise NotImplementedError('unrecognized loss string, options: [mse, l1, nll, was]')
 
@@ -73,13 +81,107 @@ def train(x,y, model_kwargs, loss_fn='mse', lr=1e-4, batch_size=124, num_epochs=
             yhat = model(x[idx], samples=nsamples)
 
             if loss_fn in ['mse', 'l1']: 
-                loss = crit(yhat, y[idx].unsqueeze(0).expand(nsamples,len(idx),-1))
+                loss = crit(yhat, y[idx].unsqueeze(0).expand(nsamples,-1,-1))
+            elif loss_fn == 'ce':
+                # this is a little divergent but for now we'll just average predictions
+                loss = crit(yhat.mean(dim=0), y[idx].view(-1))
             elif loss_fn == 'edl': 
                 loss = crit(yhat, y[idx])
             elif loss_fn == 'nll': 
                 loss = crit(yhat.mean(0), y[idx], yhat.var(0) )
             else: 
                 raise Exception('no loss objective defined')
+            loss.backward()
+            optim.step()
+            batch_loss.append(loss.item())
+        losses.append(np.mean(batch_loss))
+
+        print(f'progress: {i}/{num_epochs} --> loss: {losses[-1]:.3f}', end='\r')
+
+    return model.cpu(), losses
+
+
+
+def train_mcdo(x,y, model_kwargs, loss_fn='mse', lr=1e-4, batch_size=124, num_epochs=1000, compile=False, use_cuda=True): 
+
+    device = 'cuda' if (torch.cuda.is_available() and use_cuda) else 'cpu'
+
+    x = x.to(device)
+    y = y.to(device)
+
+    model = MCDO(in_channels=x.size(1), 
+                out_channels=y.size(1), 
+                **model_kwargs).to(device)
+    
+    if compile:
+        torch.set_float32_matmul_precision('high')
+        model = torch.compile(model)
+
+    optim = torch.optim.Adam(model.parameters(), lr=lr)
+
+    if loss_fn == 'mse': 
+        crit = torch.nn.MSELoss()
+    elif loss_fn == 'l1': 
+        crit = torch.nn.SmoothL1Loss()
+    elif loss_fn == 'ce': 
+        crit = torch.nn.CrossEntropyLoss()
+    else:
+        raise NotImplementedError('unrecognized loss string, options: [mse, l1]')
+
+    losses = []
+    for i in range(num_epochs): 
+
+        batch_loss = []
+        for idx in torch.split(torch.randperm(x.size(0)), batch_size): 
+            optim.zero_grad()
+            yhat = model(x[idx])
+            loss = crit(yhat, y[idx])
+            loss.backward()
+            optim.step()
+            batch_loss.append(loss.item())
+        losses.append(np.mean(batch_loss))
+
+        print(f'progress: {i}/{num_epochs} --> loss: {losses[-1]:.3f}', end='\r')
+
+    return model.cpu(), losses
+
+
+
+def train_mcbn(x,y, model_kwargs, loss_fn='mse', lr=1e-4, batch_size=124, num_epochs=1000, compile=False, use_cuda=True): 
+
+    device = 'cuda' if (torch.cuda.is_available() and use_cuda) else 'cpu'
+
+    x = x.to(device)
+    y = y.to(device)
+
+    model = MCBN(in_channels=x.size(1), 
+                out_channels=y.size(1), 
+                **model_kwargs).to(device)
+    
+    if compile:
+        torch.set_float32_matmul_precision('high')
+        model = torch.compile(model)
+
+    optim = torch.optim.Adam(model.parameters(), lr=lr)
+
+    if loss_fn == 'mse': 
+        crit = torch.nn.MSELoss()
+    elif loss_fn == 'l1': 
+        crit = torch.nn.SmoothL1Loss()
+    elif loss_fn == 'ce': 
+        crit = torch.nn.CrossEntropyLoss()
+    else:
+        raise NotImplementedError('unrecognized loss string, options: [mse, l1]')
+
+    losses = []
+    for i in range(num_epochs): 
+
+        batch_loss = []
+        for idx in torch.split(torch.randperm(x.size(0)), batch_size): 
+            if (len(idx)) < 2: continue
+            optim.zero_grad()
+            yhat = model(x[idx])
+            loss = crit(yhat, y[idx])
             loss.backward()
             optim.step()
             batch_loss.append(loss.item())

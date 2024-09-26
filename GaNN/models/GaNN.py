@@ -1,12 +1,13 @@
 import torch
 
 
-def init_(in_channels, out_channels, hidden_channels, layers): 
-        
+def init_(in_channels, out_channels, hidden_channels, layers):
+
         theta_size = (in_channels*hidden_channels + hidden_channels) + \
                      (hidden_channels*hidden_channels + hidden_channels)*layers + \
                      (hidden_channels*out_channels + out_channels)
         
+
         W_indices = [torch.arange(in_channels*hidden_channels)]
         offset = in_channels*hidden_channels
         for l in range(layers): 
@@ -14,8 +15,10 @@ def init_(in_channels, out_channels, hidden_channels, layers):
             offset += hidden_channels*hidden_channels
         W_indices.append(torch.arange(offset, offset + hidden_channels*out_channels))
         offset += hidden_channels*out_channels 
+
+
         bias_indices = [] 
-        for i in range(layers + 1): 
+        for i in range(layers+1): 
             bias_indices.append( torch.arange(offset, offset + hidden_channels))
             offset += hidden_channels 
         bias_indices += torch.arange(offset, offset + out_channels)
@@ -52,6 +55,8 @@ class GaNN(torch.nn.Module):
         theta_size, W_indices, bias_indices = init_(in_channels, out_channels, hidden_channels, layers)
 
         self.W_sizes = [(in_channels, hidden_channels)] + [(hidden_channels, hidden_channels) for _ in range(layers)] + [(hidden_channels, out_channels)]
+        
+        print(bias_indices)
         for i,Widx in enumerate(W_indices): self.register_buffer(f'W{i}', Widx)
         for i,Bidx in enumerate(bias_indices): self.register_buffer(f'B{i}', Bidx)
         
@@ -76,8 +81,16 @@ class GaNN(torch.nn.Module):
             B = theta[:, getattr(self, f'B{i}')].unsqueeze(2)               # size (samples, 1, channels_out)
             x = torch.matmul(W.permute(0,2,1), x) + B                                    # size (samples, )
             x = self.nonlin(x)
+
+        print(self.layers)
+        print(dir(self))
         
+        print(theta[:, getattr(self, f'B{self.layers+1}')].size())
         W = theta[:, getattr(self, f'W{self.layers+1}')].view(-1, *self.W_sizes[self.layers+1])
-        B = theta[:, getattr(self, f'B{self.layers+1}')].view(-1,self.out_channels,1)
+        B = theta[:, getattr(self, f'B{self.layers+1}')].view(-1, self.out_channels,1)
+        print(W.size())
+        print(x.size())
+        print(B.size())
         x = torch.matmul(W.permute(0,2,1), x) + B
-        return x.permute(0,2,1)
+        x = x.permute(0,2,1)
+        return x
