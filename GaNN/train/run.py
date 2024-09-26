@@ -33,8 +33,6 @@ def run_sklearn_dataset(dataset_name, model_name, model_kwargs, train_kwargs, se
         y_train = (y_train - y_mu)/(y_std + 1e-8)
         y_test = (y_test - y_mu)/(y_std + 1e-8)
 
-        nclasses = None
-
     elif dataset_name == 'mnist':  
 
         transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))])
@@ -45,7 +43,6 @@ def run_sklearn_dataset(dataset_name, model_name, model_kwargs, train_kwargs, se
         y_train = train_dataset.targets.numpy()
         X_test = test_dataset.data.numpy().reshape(-1, 28*28).astype(np.float32)
         y_test = test_dataset.targets.numpy()
-        nclasses = 10
 
     else:
         raise ValueError(f"Dataset {dataset_name} not supported.")
@@ -57,7 +54,7 @@ def run_sklearn_dataset(dataset_name, model_name, model_kwargs, train_kwargs, se
     y_test_tensor = torch.tensor(y_test).unsqueeze(1)
 
     if model_name == 'ien': 
-        model, losses = train_ien(X_train_tensor, y_train_tensor, model_kwargs=model_kwargs, **train_kwargs, nclasses=nclasses)
+        model, losses = train_ien(X_train_tensor, y_train_tensor, model_kwargs=model_kwargs, **train_kwargs)
         
         with torch.no_grad():
             model.eval()
@@ -106,6 +103,6 @@ def run_sklearn_dataset(dataset_name, model_name, model_kwargs, train_kwargs, se
         mse = mean_squared_error(y_true, y_pred)
         return {'mse':mse, 'r2':r2, 'nll':nll}
     elif task == 'classification':
-        ce = torch.nn.functional.cross_entropy(y_pred_mu, y_true).item()
+        ce = torch.nn.functional.cross_entropy(y_pred_mu, y_true.view(-1)).item()
         acc = (y_true.view(-1) == y_pred_mu.argmax(dim=-1).view(-1)).float().mean().item()
         return {'ce':ce, 'acc':acc}

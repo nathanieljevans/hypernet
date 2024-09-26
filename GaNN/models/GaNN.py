@@ -7,21 +7,20 @@ def init_(in_channels, out_channels, hidden_channels, layers):
                      (hidden_channels*hidden_channels + hidden_channels)*layers + \
                      (hidden_channels*out_channels + out_channels)
         
-
         W_indices = [torch.arange(in_channels*hidden_channels)]
         offset = in_channels*hidden_channels
-        for l in range(layers): 
+        for i in range(layers): 
             W_indices.append( torch.arange(offset, offset + hidden_channels*hidden_channels) )
             offset += hidden_channels*hidden_channels
         W_indices.append(torch.arange(offset, offset + hidden_channels*out_channels))
         offset += hidden_channels*out_channels 
 
-
         bias_indices = [] 
         for i in range(layers+1): 
             bias_indices.append( torch.arange(offset, offset + hidden_channels))
             offset += hidden_channels 
-        bias_indices += torch.arange(offset, offset + out_channels)
+
+        bias_indices.append( torch.arange(offset, offset + out_channels) )
         offset += out_channels
 
         assert theta_size == offset, f'expected theta_size ({theta_size}) to be the same as final offset ({offset})'
@@ -30,7 +29,7 @@ def init_(in_channels, out_channels, hidden_channels, layers):
 
         
 class GaNN(torch.nn.Module): 
-    def __init__(self, in_channels, out_channels, hidden_channels, layers, gaussian_channels, width, nonlin='relu'): 
+    def __init__(self, in_channels, out_channels, hidden_channels, layers, gaussian_channels, width, nonlin='relu', norm='none'): 
         super().__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels 
@@ -51,12 +50,18 @@ class GaNN(torch.nn.Module):
             self.nonlin = torch.nn.Tanh()
         else: 
             raise NotImplementedError('unrecognized nonlin string')
+        
+        if norm == 'none':
+            self.norms = torch.nn.ModuleList([torch.nn.Identity() for _ in range(self.layers+1)])
+        elif norm == 'batch': 
+            self.norms = torch.nn.ModuleList([torch.nn.BatchNorm1d(hidden_channels, affine=False) for _ in range(self.layers+1)])
+        else: 
+            raise NotImplementedError('unrecognized norm string')
 
         theta_size, W_indices, bias_indices = init_(in_channels, out_channels, hidden_channels, layers)
 
         self.W_sizes = [(in_channels, hidden_channels)] + [(hidden_channels, hidden_channels) for _ in range(layers)] + [(hidden_channels, out_channels)]
         
-        print(bias_indices)
         for i,Widx in enumerate(W_indices): self.register_buffer(f'W{i}', Widx)
         for i,Bidx in enumerate(bias_indices): self.register_buffer(f'B{i}', Bidx)
         
@@ -80,17 +85,11 @@ class GaNN(torch.nn.Module):
             W = theta[:, getattr(self, f'W{i}')].view(-1, *self.W_sizes[i]) # size (samples, channels_in, channels_out)
             B = theta[:, getattr(self, f'B{i}')].unsqueeze(2)               # size (samples, 1, channels_out)
             x = torch.matmul(W.permute(0,2,1), x) + B                                    # size (samples, )
+            x = self.norms[i](x.permute(2,1,0)).permute(2,1,0)
             x = self.nonlin(x)
 
-        print(self.layers)
-        print(dir(self))
-        
-        print(theta[:, getattr(self, f'B{self.layers+1}')].size())
         W = theta[:, getattr(self, f'W{self.layers+1}')].view(-1, *self.W_sizes[self.layers+1])
         B = theta[:, getattr(self, f'B{self.layers+1}')].view(-1, self.out_channels,1)
-        print(W.size())
-        print(x.size())
-        print(B.size())
         x = torch.matmul(W.permute(0,2,1), x) + B
         x = x.permute(0,2,1)
         return x
