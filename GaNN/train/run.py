@@ -9,6 +9,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import r2_score, mean_squared_error
 from sklearn.datasets import load_diabetes, fetch_california_housing
 from torchvision import datasets, transforms
+from GaNN.train.utils import expected_calibration_error
 
 def run_sklearn_dataset(dataset_name, model_name, model_kwargs, train_kwargs, seed=42, task='regression'):
     
@@ -105,4 +106,5 @@ def run_sklearn_dataset(dataset_name, model_name, model_kwargs, train_kwargs, se
     elif task == 'classification':
         ce = torch.nn.functional.cross_entropy(y_pred_mu, y_true.view(-1)).item()
         acc = (y_true.view(-1) == y_pred_mu.argmax(dim=-1).view(-1)).float().mean().item()
-        return {'ce':ce, 'acc':acc}
+        ece = expected_calibration_error(y_pred_mu, y_true, n_bins=10)
+        return {'ce':ce, 'acc':acc, 'ece':ece}

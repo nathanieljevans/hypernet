@@ -83,8 +83,8 @@ def train_ien(x,y, model_kwargs, loss_fn='mse', lr=1e-4, batch_size=124, num_epo
             if loss_fn in ['mse', 'l1']: 
                 loss = crit(yhat, y[idx].unsqueeze(0).expand(nsamples,-1,-1))
             elif loss_fn == 'ce':
-                # this is a little divergent but for now we'll just average predictions
-                loss = crit(yhat.mean(dim=0), y[idx].view(-1))
+                loss = crit(yhat.contiguous().view(-1, out_channels), y[idx].unsqueeze(0).expand(nsamples,-1,-1).contiguous().view(-1))
+                #loss = crit(yhat.mean(dim=0), y[idx].view(-1))
             elif loss_fn == 'edl': 
                 loss = crit(yhat, y[idx])
             elif loss_fn == 'nll': 

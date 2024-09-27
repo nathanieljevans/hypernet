@@ -1,0 +1,42 @@
+# primary environment 
+
+name: gann
+
+channels: 
+    - pytorch 
+    - nvidia 
+    - pyg
+    - conda-forge
+    - mcs07
+    - defaults 
+
+dependencies:
+    - python=3.10
+    - matplotlib
+    - pubchempy
+    - pyg
+    - pytorch
+    - pytorch-cuda
+    - seaborn
+    - scikit-learn
+    - h5py
+    - scipy
+    - tensorboard
+    - shapely
+    - statsmodels
+    - rdkit
+    - shap
+    - pip
+    - pyro-ppl
+    - pip:
+        - tensorboardX
+        - ipykernel
+        - umap-learn
+        - biopython
+        - obonet
+        - omnipath 
+        - adjustText
+        - torch-sparse 
+        - torch-scatter
+        - torch-cluster
+        - pytest
