@@ -65,7 +65,7 @@ def train_ien(x,y, model_kwargs, loss_fn='mse', lr=1e-4, batch_size=124, num_epo
         crit = torch.nn.SmoothL1Loss()
     elif loss_fn == 'nll': 
         crit = torch.nn.GaussianNLLLoss()
-    elif loss_fn == 'edl': 
+    elif loss_fn in ['edl']: 
         crit = EnergyDistanceLoss()
     elif loss_fn == 'ce': 
         crit = torch.nn.CrossEntropyLoss()
@@ -84,8 +84,7 @@ def train_ien(x,y, model_kwargs, loss_fn='mse', lr=1e-4, batch_size=124, num_epo
                 loss = crit(yhat, y[idx].unsqueeze(0).expand(nsamples,-1,-1))
             elif loss_fn == 'ce':
                 loss = crit(yhat.contiguous().view(-1, out_channels), y[idx].unsqueeze(0).expand(nsamples,-1,-1).contiguous().view(-1))
-                #loss = crit(yhat.mean(dim=0), y[idx].view(-1))
-            elif loss_fn == 'edl': 
+            elif loss_fn in ['edl']: 
                 loss = crit(yhat, y[idx])
             elif loss_fn == 'nll': 
                 loss = crit(yhat.mean(0), y[idx], yhat.var(0) )
