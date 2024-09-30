@@ -1,10 +1,9 @@
 
 import torch
-from GaNN.models.MCBN import MCBN
+from hnet.models.MCDO import MCDO
 import numpy as np
 
-
-def train_mcbn(x,y, model_kwargs, loss_fn='mse', lr=1e-4, batch_size=124, num_epochs=1000, compile=False, use_cuda=True): 
+def train_mcdo(x,y, model_kwargs, loss_fn='mse', lr=1e-4, batch_size=124, num_epochs=1000, compile=False, use_cuda=True): 
 
     device = 'cuda' if (torch.cuda.is_available() and use_cuda) else 'cpu'
 
@@ -16,7 +15,7 @@ def train_mcbn(x,y, model_kwargs, loss_fn='mse', lr=1e-4, batch_size=124, num_ep
     else: 
         out_channels = y.size(1)
 
-    model = MCBN(in_channels=x.size(1), 
+    model = MCDO(in_channels=x.size(1), 
                 out_channels=out_channels, 
                 **model_kwargs).to(device)
     
@@ -40,13 +39,14 @@ def train_mcbn(x,y, model_kwargs, loss_fn='mse', lr=1e-4, batch_size=124, num_ep
 
         batch_loss = []
         for idx in torch.split(torch.randperm(x.size(0)), batch_size): 
-            if (len(idx)) < 2: continue
             optim.zero_grad()
             yhat = model(x[idx])
             if loss_fn in ['mse', 'l1']: 
                 loss = crit(yhat, y[idx])
             elif loss_fn == 'ce':
                 loss = crit(yhat, y[idx].view(-1))
+            else: 
+                raise Exception('no loss objective defined')
             loss.backward()
             optim.step()
             batch_loss.append(loss.item())

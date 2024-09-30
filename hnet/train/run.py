@@ -1,17 +1,17 @@
 
 import torch
-from GaNN.deprecated.GaNN import GaNN
-from GaNN.models.MCDO import MCDO
-from GaNN.train.mcbn import train_mcbn
-from GaNN.train.mcdo import train_mcdo
-from GaNN.train.hnet import train_hnet
+from hnet.deprecated.GaNN import GaNN
+from hnet.models.MCDO import MCDO
+from hnet.train.mcbn import train_mcbn
+from hnet.train.mcdo import train_mcdo
+from hnet.train.hnet import train_hnet
 import numpy as np
 import torch.nn as nn
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import r2_score, mean_squared_error
 from sklearn.datasets import load_diabetes, fetch_california_housing
 from torchvision import datasets, transforms
-from GaNN.train.utils import expected_calibration_error
+from hnet.train.utils import expected_calibration_error
 
 def run_sklearn_dataset(dataset_name, model_name, mlp_kwargs, train_kwargs, hnet_kwargs=None, seed=42):
     

@@ -1,7 +1,7 @@
 
 import torch
-from GaNN.models.MLP import MLP 
-from GaNN.models.HyperNet import HyperNet
+from hnet.models.MLP import MLP 
+from hnet.models.HyperNet import HyperNet
 import numpy as np
 import torch.nn as nn
 
