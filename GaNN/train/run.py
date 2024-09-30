@@ -1,8 +1,10 @@
 
 import torch
-from GaNN.models.GaNN import GaNN
+from GaNN.deprecated.GaNN import GaNN
 from GaNN.models.MCDO import MCDO
-from GaNN.train.train import train_ien, train_mcdo, train_mcbn
+from GaNN.train.mcbn import train_mcbn
+from GaNN.train.mcdo import train_mcdo
+from GaNN.train.hnet import train_hnet
 import numpy as np
 import torch.nn as nn
 from sklearn.model_selection import train_test_split
@@ -11,7 +13,7 @@ from sklearn.datasets import load_diabetes, fetch_california_housing
 from torchvision import datasets, transforms
 from GaNN.train.utils import expected_calibration_error
 
-def run_sklearn_dataset(dataset_name, model_name, model_kwargs, train_kwargs, seed=42, task='regression'):
+def run_sklearn_dataset(dataset_name, model_name, mlp_kwargs, train_kwargs, hnet_kwargs=None, seed=42):
     
     if dataset_name in ['diabetes', 'california']: 
         if dataset_name == "diabetes":
@@ -34,6 +36,8 @@ def run_sklearn_dataset(dataset_name, model_name, model_kwargs, train_kwargs, se
         y_train = (y_train - y_mu)/(y_std + 1e-8)
         y_test = (y_test - y_mu)/(y_std + 1e-8)
 
+        task = 'regression'
+
     elif dataset_name == 'mnist':  
 
         transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))])
@@ -41,9 +45,11 @@ def run_sklearn_dataset(dataset_name, model_name, model_kwargs, train_kwargs, se
         test_dataset = datasets.MNIST(root='./data', train=False, download=True, transform=transform)
 
         X_train = train_dataset.data.numpy().reshape(-1, 28*28).astype(np.float32)
-        y_train = train_dataset.targets.numpy()
+        y_train = train_dataset.targets.numpy().astype(int)
         X_test = test_dataset.data.numpy().reshape(-1, 28*28).astype(np.float32)
-        y_test = test_dataset.targets.numpy()
+        y_test = test_dataset.targets.numpy().astype(int)
+
+        task = 'classification'
 
     else:
         raise ValueError(f"Dataset {dataset_name} not supported.")
@@ -54,8 +60,8 @@ def run_sklearn_dataset(dataset_name, model_name, model_kwargs, train_kwargs, se
     y_train_tensor = torch.tensor(y_train).unsqueeze(1)  # Convert to column vector
     y_test_tensor = torch.tensor(y_test).unsqueeze(1)
 
-    if model_name == 'ien': 
-        model, losses = train_ien(X_train_tensor, y_train_tensor, model_kwargs=model_kwargs, **train_kwargs)
+    if model_name == 'hnet': 
+        model, losses = train_hnet(X_train_tensor, y_train_tensor, mlp_kwargs=mlp_kwargs, hnet_kwargs=hnet_kwargs, **train_kwargs)
         
         with torch.no_grad():
             model.eval()
@@ -68,7 +74,7 @@ def run_sklearn_dataset(dataset_name, model_name, model_kwargs, train_kwargs, se
             y_true = y_test_tensor
 
     elif model_name == 'mcdo': 
-        model, losses = train_mcdo(X_train_tensor, y_train_tensor, model_kwargs=model_kwargs, **train_kwargs)
+        model, losses = train_mcdo(X_train_tensor, y_train_tensor, model_kwargs=mlp_kwargs, **train_kwargs)
     
         with torch.no_grad():
             model.train() # make sure do is active
@@ -81,7 +87,7 @@ def run_sklearn_dataset(dataset_name, model_name, model_kwargs, train_kwargs, se
             y_true = y_test_tensor
         
     elif model_name == 'mcbn': 
-        model, losses = train_mcbn(X_train_tensor, y_train_tensor, model_kwargs=model_kwargs, **train_kwargs)
+        model, losses = train_mcbn(X_train_tensor, y_train_tensor, model_kwargs=mlp_kwargs, **train_kwargs)
         
         with torch.no_grad():
             model.train() # make sure do is active
