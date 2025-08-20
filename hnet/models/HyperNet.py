@@ -1,7 +1,16 @@
 import torch
+from hnet.models.RealNVP import RealNVP
 
 class HyperNet(torch.nn.Module): 
-    def __init__(self, model, stochastic_channels=8, width=10, nonlin='relu'): 
+    def __init__(self, model, 
+                       stochastic_channels=8, 
+                       width=10, 
+                       nonlin='elu', 
+                       learn_pz=False, 
+                       nvp_kwargs={'hidden_dim': 64, 
+                                   'num_layers': 8, 
+                                   'nonlin': 'elu', 
+                                   'mask_type': 'alternating'}): 
         super().__init__()
 
         self.model = model 
@@ -31,9 +40,19 @@ class HyperNet(torch.nn.Module):
         self.f_phi = torch.nn.Sequential(torch.nn.Linear(stochastic_channels, width, bias=False), 
                                          nonlin(), 
                                          torch.nn.Linear(width, nparams, bias=False) )
+
         
         self.register_buffer('mu', torch.zeros((stochastic_channels), requires_grad=False))
         self.register_buffer('std', torch.ones((stochastic_channels), requires_grad=False))
+
+        if learn_pz: 
+            self.normalizing_flow = RealNVP(input_dim=stochastic_channels, 
+                                            hidden_dim=nvp_kwargs['hidden_dim'], 
+                                            num_layers=nvp_kwargs['num_layers'], 
+                                            nonlin=nvp_kwargs['nonlin'], 
+                                            mask_type=nvp_kwargs['mask_type'])
+        else: 
+            self.normalizing_flow = None 
 
     def sample(self): 
         '''
@@ -41,6 +60,10 @@ class HyperNet(torch.nn.Module):
         '''
         m = torch.distributions.Normal(self.mu, self.std)
         z = m.sample()
+        
+        if self.normalizing_flow is not None: 
+            z = self.normalizing_flow(z)
+
         theta = self.f_phi(z)
         state_dict = {n:theta[idx].view(self.state_size_dict[n]) for n,idx in self.state_idx_dict.items()}
         return state_dict
@@ -52,3 +75,5 @@ class HyperNet(torch.nn.Module):
             return torch.func.functional_call(self.model, state_dict, x)
 
         return torch.func.vmap(sample_, in_dims=0, randomness='different')(x.unsqueeze(0).expand(samples, -1, -1))
+
+ 

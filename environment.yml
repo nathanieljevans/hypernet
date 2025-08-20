@@ -9,11 +9,10 @@ channels:
     - defaults 
 
 dependencies:
-    - python=3.10
+    - python
     - matplotlib
     - pyg
     - pytorch
-    - pytorch-cuda
     - seaborn
     - scikit-learn
     - scipy

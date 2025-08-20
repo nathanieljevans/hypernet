@@ -79,7 +79,7 @@ def init_hnet(model, init_dict, samples=100, iters=100, lr=1e-3, verbose=True):
     return model
             
 
-def train_hnet(x,y, mlp_kwargs, hnet_kwargs, loss_fn='mse', lr=1e-4, batch_size=124, num_epochs=1000, nsamples=1000, compile=False, use_cuda=True, pretrain_init=True): 
+def train_hnet(x,y, mlp_kwargs, hnet_kwargs, loss_fn='mse', lr=1e-4, batch_size=124, num_epochs=1000, nsamples=1000, compile=False, use_cuda=True, pretrain_init=False): 
 
     device = 'cuda' if (torch.cuda.is_available() and use_cuda) else 'cpu'
 
