@@ -6,6 +6,11 @@ class HyperNet(torch.nn.Module):
                        stochastic_channels=8, 
                        width=10, 
                        nonlin='elu', 
+                       dropout=0, 
+                       norm='none',
+                       bias=False,
+                       affine=False,
+                       init_dict=None, 
                        learn_pz=False, 
                        nvp_kwargs={'hidden_dim': 64, 
                                    'num_layers': 8, 
@@ -19,7 +24,8 @@ class HyperNet(torch.nn.Module):
         state_idx_dict = {}
         state_size_dict = {}
         offset = 0 
-        for name, value in model.state_dict().items(): 
+        #for name, value in model.state_dict().items(): 
+        for name, value in model.named_parameters(): 
             #if not value.requires_grad: continue
             n = value.numel()
             state_idx_dict[name] = torch.arange(offset, offset+n)
@@ -37,9 +43,20 @@ class HyperNet(torch.nn.Module):
         }
         nonlin = nonlin_map[nonlin]
 
-        self.f_phi = torch.nn.Sequential(torch.nn.Linear(stochastic_channels, width, bias=False), 
+        norm_map = {
+            'none': torch.nn.Identity,
+            'layer': lambda: torch.nn.LayerNorm(width),
+        }
+
+        self.f_phi = torch.nn.Sequential(torch.nn.Linear(stochastic_channels, width, bias=bias), 
+                                         norm_map[norm](),
                                          nonlin(), 
-                                         torch.nn.Linear(width, nparams, bias=False) )
+                                         torch.nn.Dropout(dropout), 
+                                         torch.nn.Linear(width, width, bias=bias), 
+                                         norm_map[norm](),
+                                         nonlin(), 
+                                         torch.nn.Dropout(dropout),
+                                         torch.nn.Linear(width, nparams, bias=bias) )
 
         
         self.register_buffer('mu', torch.zeros((stochastic_channels), requires_grad=False))
@@ -54,6 +71,11 @@ class HyperNet(torch.nn.Module):
         else: 
             self.normalizing_flow = None 
 
+        self.affine = affine
+        if affine: self.scale = torch.nn.Parameter(torch.ones((nparams)), requires_grad=True)
+
+        self.init_dict = init_dict
+
     def sample(self): 
         '''
         init_dict, {param_name->(mean,var)}
@@ -64,8 +86,19 @@ class HyperNet(torch.nn.Module):
         if self.normalizing_flow is not None: 
             z = self.normalizing_flow(z)
 
-        theta = self.f_phi(z)
+        theta = self.f_phi(z) 
+
+        if self.affine: 
+            theta = theta * self.scale
+
         state_dict = {n:theta[idx].view(self.state_size_dict[n]) for n,idx in self.state_idx_dict.items()}
+
+        # DEV
+        if self.init_dict is not None: 
+            for name, (mu, var) in self.init_dict.items(): 
+                if name in state_dict: 
+                    state_dict[name] = state_dict[name] * torch.sqrt(var) + mu
+
         return state_dict
         
     def forward(self, x, samples=10):
@@ -74,6 +107,8 @@ class HyperNet(torch.nn.Module):
             state_dict = self.sample()
             return torch.func.functional_call(self.model, state_dict, x)
 
-        return torch.func.vmap(sample_, in_dims=0, randomness='different')(x.unsqueeze(0).expand(samples, -1, -1))
+        return torch.func.vmap(sample_, 
+                               in_dims=0, 
+                               randomness='different')(x.unsqueeze(0).expand(samples, -1, -1))
 
  
