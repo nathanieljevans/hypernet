@@ -31,8 +31,10 @@ def plot1d(x, y, y_true, true_lcb, true_ucb, x2=None, yhat=None, title='', plot_
                             pred_ucb,
                             color='blue', alpha=0.25, label='True CI')
         else: 
+            alpha_ = np.clip(1/(yhat.size(0)/50), 0.001,1) 
             for yyhat in yhat.detach().cpu().numpy(): 
-                plt.plot(x2, yyhat, 'b-', alpha=1/(yhat.size(0)/50))
+
+                plt.plot(x2, yyhat, 'b-', alpha=alpha_)
         
     plt.plot(x, y_true, 'r-', label='true')
     plt.plot(x, y, 'k.', label='data', alpha=0.25)

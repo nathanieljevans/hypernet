@@ -11,6 +11,7 @@ class HyperNet(torch.nn.Module):
                        bias=False,
                        affine=False,
                        init_dict=None, 
+                       pz='normal',
                        learn_pz=False, 
                        nvp_kwargs={'hidden_dim': 64, 
                                    'num_layers': 8, 
@@ -75,18 +76,40 @@ class HyperNet(torch.nn.Module):
         if affine: self.scale = torch.nn.Parameter(torch.ones((nparams)), requires_grad=True)
 
         self.init_dict = init_dict
+        self.pz = pz 
 
-    def sample(self): 
-        '''
-        init_dict, {param_name->(mean,var)}
-        '''
-        m = torch.distributions.Normal(self.mu, self.std)
-        z = m.sample()
+    def sample_theta_(self, ret_z=False): 
+
+        if self.pz == 'normal': 
+            m = torch.distributions.Normal(self.mu, self.std)
+            z = m.sample()
+        elif self.pz == 'uniform': 
+            m = torch.distributions.Uniform(self.mu, self.std)
+            z = m.sample()
+        elif self.pz == 'bernoulli': 
+            m = torch.distributions.Bernoulli(probs=0.5*torch.ones_like(self.mu))
+            z = m.sample()
+        elif self.pz == 'categorical': 
+            m = torch.distributions.Categorical(probs=0.5*torch.ones_like(self.mu))
+            z = m.sample()
+        else: 
+            raise ValueError(f'Invalid pz: {self.pz}')
         
         if self.normalizing_flow is not None: 
             z = self.normalizing_flow(z)
 
         theta = self.f_phi(z) 
+
+        if ret_z: 
+            return theta,z 
+        else: 
+            return theta 
+
+    def sample(self): 
+        '''
+        init_dict, {param_name->(mean,var)}
+        '''
+        theta = self.sample_theta_() 
 
         if self.affine: 
             theta = theta * self.scale
@@ -100,6 +123,23 @@ class HyperNet(torch.nn.Module):
                     state_dict[name] = state_dict[name] * torch.sqrt(var) + mu
 
         return state_dict
+
+    def diversity_loss(self, p=2): 
+
+        theta1, z1 = self.sample_theta_(ret_z=True)
+        theta2, z2 = self.sample_theta_(ret_z=True)
+
+        w = torch.cdist(z1.unsqueeze(0), z2.unsqueeze(0), p=p)
+
+        loss = torch.nn.functional.cosine_similarity(theta1.view(1,-1), theta2.view(1,-1)) 
+
+        loss = torch.abs(loss)
+
+        return w*loss
+        
+
+
+
         
     def forward(self, x, samples=10):
 
