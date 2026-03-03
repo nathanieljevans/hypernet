@@ -5,21 +5,18 @@ channels:
     - nvidia 
     - pyg
     - conda-forge
-    - mcs07
     - defaults 
 
 dependencies:
     - python
     - matplotlib
     - pyg
-    - pytorch
+    - pytorch::pytorch
+    - pytorch::pytorch-cuda
+    - torchvision
     - seaborn
     - scikit-learn
     - scipy
     - pip
     - pip:
         - ipykernel
-        - adjustText
-        - torch-sparse 
-        - torch-scatter
-        - torch-cluster
