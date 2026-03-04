@@ -1,5 +1,7 @@
 # HyperNet
 
+[![DOI](https://zenodo.org/badge/862143613.svg)](https://doi.org/10.5281/zenodo.18853388)  
+
 A PyTorch library for hypernetwork-based uncertainty estimation in neural networks. A hypernetwork $f_\phi(z)$ maps stochastic latent samples $z \sim p(z)$ to weight vectors $\theta$ for a base network, producing an implicit ensemble of models that yields calibrated uncertainty estimates through prediction variance.
 
 ## Key Features
