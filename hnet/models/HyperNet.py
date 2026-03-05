@@ -5,6 +5,7 @@ class HyperNet(torch.nn.Module):
     def __init__(self, model, 
                        stochastic_channels=8, 
                        width=10, 
+                       cond_dim=0,
                        nonlin='elu', 
                        dropout=0, 
                        norm='none',
@@ -49,7 +50,9 @@ class HyperNet(torch.nn.Module):
             'layer': lambda: torch.nn.LayerNorm(width),
         }
 
-        self.f_phi = torch.nn.Sequential(torch.nn.Linear(stochastic_channels, width, bias=bias), 
+        in_channels = stochastic_channels + cond_dim
+
+        self.f_phi = torch.nn.Sequential(torch.nn.Linear(in_channels, width, bias=bias), 
                                          norm_map[norm](),
                                          nonlin(), 
                                          torch.nn.Dropout(dropout), 
@@ -78,7 +81,7 @@ class HyperNet(torch.nn.Module):
         self.init_dict = init_dict
         self.pz = pz 
 
-    def sample_theta_(self, ret_z=False): 
+    def sample_theta_(self, ret_z=False, C=None): 
 
         if self.pz == 'normal': 
             m = torch.distributions.Normal(self.mu, self.std)
@@ -96,7 +99,10 @@ class HyperNet(torch.nn.Module):
             raise ValueError(f'Invalid pz: {self.pz}')
         
         if self.normalizing_flow is not None: 
-            z = self.normalizing_flow(z)
+            z = self.normalizing_flow(z) 
+
+        if C is not None:
+            z = torch.cat([z, C], dim=-1)
 
         theta = self.f_phi(z) 
 
@@ -105,11 +111,11 @@ class HyperNet(torch.nn.Module):
         else: 
             return theta 
 
-    def sample(self): 
+    def sample(self, C=None): 
         '''
         init_dict, {param_name->(mean,var)}
         '''
-        theta = self.sample_theta_() 
+        theta = self.sample_theta_(C=C) 
 
         if self.affine: 
             theta = theta * self.scale
@@ -141,10 +147,10 @@ class HyperNet(torch.nn.Module):
 
 
         
-    def forward(self, x, samples=10):
+    def forward(self, x, samples=10, C=None):
 
         def sample_(x):
-            state_dict = self.sample()
+            state_dict = self.sample(C=C)
             return torch.func.functional_call(self.model, state_dict, x)
 
         return torch.func.vmap(sample_, 
