@@ -14,6 +14,7 @@ class HyperNet(torch.nn.Module):
                        init_dict=None, 
                        pz='normal',
                        learn_pz=False, 
+                       theta_transform=None,
                        nvp_kwargs={'hidden_dim': 64, 
                                    'num_layers': 8, 
                                    'nonlin': 'elu', 
@@ -21,6 +22,9 @@ class HyperNet(torch.nn.Module):
         super().__init__()
 
         self.model = model 
+
+        self.theta_transform = theta_transform
+
         nparams = sum([p.numel() for p in model.parameters() if p.requires_grad])
 
         state_idx_dict = {}
@@ -81,48 +85,53 @@ class HyperNet(torch.nn.Module):
         self.init_dict = init_dict
         self.pz = pz 
 
-    def sample_theta_(self, ret_z=False, C=None): 
-
+    def _sample_z(self, n=None):
         if self.pz == 'normal': 
             m = torch.distributions.Normal(self.mu, self.std)
-            z = m.sample()
         elif self.pz == 'uniform': 
             m = torch.distributions.Uniform(self.mu, self.std)
-            z = m.sample()
         elif self.pz == 'bernoulli': 
             m = torch.distributions.Bernoulli(probs=0.5*torch.ones_like(self.mu))
-            z = m.sample()
         elif self.pz == 'categorical': 
-            m = torch.distributions.Categorical(probs=0.5*torch.ones_like(self.mu))
-            z = m.sample()
+            m = torch.distributions.Categorical(probs=torch.ones_like(self.mu)/self.mu.shape[0])
         else: 
             raise ValueError(f'Invalid pz: {self.pz}')
+        return m.sample((n,)) if n is not None else m.sample()
+
+    def sample_theta_(self, ret_z=False, C=None, z=None): 
+
+        if z is None: 
+            z = self._sample_z()
         
         if self.normalizing_flow is not None: 
             z = self.normalizing_flow(z) 
 
         if C is not None:
+            if z.dim() == 1:
+                C = C.flatten()
             z = torch.cat([z, C], dim=-1)
 
         theta = self.f_phi(z) 
+
+        if self.theta_transform is not None:
+            theta = self.theta_transform(theta)
 
         if ret_z: 
             return theta,z 
         else: 
             return theta 
 
-    def sample(self, C=None): 
+    def sample(self, C=None, z=None): 
         '''
         init_dict, {param_name->(mean,var)}
         '''
-        theta = self.sample_theta_(C=C) 
+        theta = self.sample_theta_(C=C, z=z) 
 
         if self.affine: 
             theta = theta * self.scale
 
         state_dict = {n:theta[idx].view(self.state_size_dict[n]) for n,idx in self.state_idx_dict.items()}
 
-        # DEV
         if self.init_dict is not None: 
             for name, (mu, var) in self.init_dict.items(): 
                 if name in state_dict: 
@@ -147,14 +156,36 @@ class HyperNet(torch.nn.Module):
 
 
         
-    def forward(self, x, samples=10, C=None):
+    def forward(self, x, samples=10, C=None, z=None, return_z=False):
+        '''
 
-        def sample_(x):
-            state_dict = self.sample(C=C)
+        Args: 
+            x: (B, in_channels)                 - input data for the base model
+            C: (cond_dim,)                      - conditional vector that will apply to all samples in the batch
+            samples: int                        - number of samples to draw from the hypernetwork
+            z: (samples, stochastic_channels)   - latent codes to use for the hypernetwork  
+            return_z: bool                      - if True, also return the latent codes used
+
+        Returns: 
+            yhat: (samples, B, out_channels)    - ensemble of predictions from the base model
+            z:    (samples, stochastic_channels) - (only if return_z=True) latent codes used
+        '''
+
+        if z is None:
+            z = self._sample_z(samples)
+        else:
+            samples = z.shape[0]
+
+        def sample_(x, z):
+            state_dict = self.sample(C=C, z=z)
             return torch.func.functional_call(self.model, state_dict, x)
 
-        return torch.func.vmap(sample_, 
-                               in_dims=0, 
-                               randomness='different')(x.unsqueeze(0).expand(samples, -1, -1))
+        yhat = torch.func.vmap(sample_, 
+                               in_dims=(0, 0), 
+                               randomness='different')(x.unsqueeze(0).expand(samples, -1, -1), z)
+
+        if return_z:
+            return yhat, z
+        return yhat
 
  
