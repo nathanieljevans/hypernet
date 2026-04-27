@@ -113,8 +113,9 @@ class HyperNet(torch.nn.Module):
 
         theta = self.f_phi(z) 
 
-        if self.theta_transform is not None:
-            theta = self.theta_transform(theta)
+        if hasattr(self, 'theta_transform'):
+            if self.theta_transform is not None:
+                theta = self.theta_transform(theta)
 
         if ret_z: 
             return theta,z 
